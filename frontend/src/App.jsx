@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, CheckCircle, Activity, Brain, AlertTriangle, FileSearch } from 'lucide-react';
+import { Upload, FileText, CheckCircle, Activity, Brain, AlertTriangle, FileSearch, BarChart2 } from 'lucide-react';
+import AnalyticsDashboard from './AnalyticsDashboard';
+import AnalyticsHistory from './AnalyticsHistory';
 
 function App() {
    const [file, setFile] = useState(null);
@@ -7,6 +9,7 @@ function App() {
    const [loading, setLoading] = useState(false);
    const [result, setResult] = useState(null);
    const [error, setError] = useState(null);
+   const [view, setView] = useState('analyzer'); // 'analyzer' or 'history'
    const fileInputRef = useRef(null);
 
    const handleDragOver = (e) => {
@@ -73,17 +76,44 @@ function App() {
       }
    };
 
+   // Show analytics history view
+   if (view === 'history') {
+      return <AnalyticsHistory onBack={() => setView('analyzer')} />;
+   }
+
    return (
       <div style={{ minHeight: '100vh', padding: '40px 20px' }}>
          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
 
             {/* Header */}
             <header style={{ marginBottom: '48px' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                  <Brain size={32} color="#2563eb" strokeWidth={2} />
-                  <h1 style={{ fontSize: '28px', fontWeight: '600', margin: 0 }}>
-                     PDF Analyzer
-                  </h1>
+               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                     <Brain size={32} color="#2563eb" strokeWidth={2} />
+                     <h1 style={{ fontSize: '28px', fontWeight: '600', margin: 0 }}>
+                        PDF Analyzer
+                     </h1>
+                  </div>
+                  <button
+                     onClick={() => setView('history')}
+                     style={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px 20px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        transition: 'all 0.2s ease'
+                     }}
+                  >
+                     <BarChart2 size={18} />
+                     Analytics
+                  </button>
                </div>
                <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '14px' }}>
                   Multi-agent document intelligence system
@@ -268,6 +298,9 @@ function App() {
                         ))}
                      </div>
                   </details>
+
+                  {/* Analytics Dashboard */}
+                  <AnalyticsDashboard analytics={result.analytics} />
 
                </div>
             )}

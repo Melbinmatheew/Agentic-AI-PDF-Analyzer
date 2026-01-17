@@ -1,13 +1,36 @@
-fastapi
-uvicorn
-python-multipart
-pypdf
-pytesseract
-langchain
-langchain-core
-langchain-openai
-langgraph
-sqlalchemy
-python-dotenv
-httpx
-openai
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# CORS Support
+fastapi-cors==0.0.6
+
+# PDF Processing
+pypdf==3.17.4
+pytesseract==0.3.10
+Pillow==10.2.0
+
+# LangChain & LangGraph (Agentic AI)
+langchain==0.1.4
+langchain-core>=0.1.16,<0.2
+langchain-openai==0.0.5
+langgraph==0.0.20
+
+# Database
+sqlalchemy==2.0.25
+
+# Environment & Configuration
+python-dotenv==1.0.0
+
+# HTTP Client
+httpx==0.26.0
+
+# OpenAI API
+openai==1.10.0
+
+# Data Validation
+pydantic==2.5.3
+
+# Utilities
+typing-extensions==4.9.0

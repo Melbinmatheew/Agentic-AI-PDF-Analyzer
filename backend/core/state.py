@@ -11,3 +11,5 @@ class DocumentState(TypedDict):
     summary: Optional[str]
     insights: List[str]
     agent_logs: List[str]
+    _token_tracker: Any
+    _agent_tracker: Any

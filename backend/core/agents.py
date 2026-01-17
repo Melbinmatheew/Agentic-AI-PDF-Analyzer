@@ -2,6 +2,7 @@ import os
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from langchain_core.callbacks import BaseCallbackHandler
 from core.state import DocumentState
 import json
 
@@ -12,7 +13,7 @@ MODEL_NAME = os.getenv("LLM_MODEL", "google/gemini-2.0-flash-001") # flexible de
 BASE_URL = "https://openrouter.ai/api/v1"
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-def get_llm():
+def get_llm(callbacks=None):
     if not API_KEY:
         # Fallback only for demonstration or specific envs; ideally should raise error or handle gracefully
         print("Warning: OPENROUTER_API_KEY not found.")
@@ -21,16 +22,39 @@ def get_llm():
         model=MODEL_NAME,
         openai_api_key=API_KEY,
         openai_api_base=BASE_URL,
-        temperature=0.1
+        temperature=0.1,
+        callbacks=callbacks or []
     )
 
 # --- Agent 1: Document Classifier ---
 def document_classifier_agent(state: DocumentState) -> DocumentState:
-    llm = get_llm()
+    import time
+    start_time = time.time()
+    
+    # Get analytics trackers from state
+    token_tracker = state.get('_token_tracker')
+    agent_tracker = state.get('_agent_tracker')
+    
+    if agent_tracker:
+        agent_tracker.start_agent("classifier", state)
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
+    
     # We use a snippet of text to classify to save tokens, or full text if reasonable.
     # For classification, the first 2000 chars are usually enough + some middle/end?
     # Let's use the first chunk or first 3000 chars of raw text.
     text_sample = state["raw_text"][:3000]
+
+    if agent_tracker:
+        agent_tracker.start_agent(
+            "classifier", 
+            state, 
+            additional_info={"sample_length": len(text_sample)}
+        )
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
 
     prompt = ChatPromptTemplate.from_template(
         """
@@ -53,18 +77,41 @@ def document_classifier_agent(state: DocumentState) -> DocumentState:
         result = chain.invoke({"text": text_sample})
         doc_type = result.get("document_type", "Unknown")
         log = f"Classifier Agent: Identified document as {doc_type}"
+        success = True
     except Exception as e:
         doc_type = "Unknown"
         log = f"Classifier Agent: Failed to classify. Error: {str(e)}"
+        success = False
 
-    return {
+    result_state = {
         "document_type": doc_type,
         "agent_logs": state.get("agent_logs", []) + [log]
     }
+    
+    if agent_tracker:
+        agent_tracker.end_agent(
+            result_state, 
+            success=success,
+            additional_info={"classified_type": doc_type}
+        )
+    
+    return result_state
 
 # --- Agent 2: Content Extraction Agent ---
 def content_extraction_agent(state: DocumentState) -> DocumentState:
-    llm = get_llm()
+    import time
+    start_time = time.time()
+    
+    # Get analytics trackers from state
+    token_tracker = state.get('_token_tracker')
+    agent_tracker = state.get('_agent_tracker')
+    
+    if agent_tracker:
+        agent_tracker.start_agent("extractor", state)
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
+    
     doc_type = state["document_type"]
     text_sample = state["raw_text"]  
     # For extraction, we might need more context. 
@@ -73,6 +120,19 @@ def content_extraction_agent(state: DocumentState) -> DocumentState:
     # A robust production system would iterate over chunks.
     # Let's limit to 10k chars for this demo to ensure speed and low cost.
     processing_text = text_sample[:10000] 
+
+    if agent_tracker:
+        agent_tracker.start_agent(
+            "extractor", 
+            state,
+            additional_info={
+                "document_type": doc_type,
+                "processing_length": len(processing_text)
+            }
+        )
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
 
     prompt = ChatPromptTemplate.from_template(
         """
@@ -97,24 +157,57 @@ def content_extraction_agent(state: DocumentState) -> DocumentState:
         result = chain.invoke({"doc_type": doc_type, "text": processing_text})
         sections = result.get("sections", {})
         log = f"Extraction Agent: Extracted {len(sections)} key sections."
+        success = True
     except Exception as e:
         sections = {}
         log = f"Extraction Agent: Extraction failed. Error: {str(e)}"
+        success = False
         
-    return {
+    result_state = {
         "extracted_sections": sections,
         "agent_logs": state["agent_logs"] + [log]
     }
+    
+    if agent_tracker:
+        agent_tracker.end_agent(
+            result_state, 
+            success=success,
+            additional_info={"sections_found": len(sections)}
+        )
+    
+    return result_state
 
 # --- Agent 3: Summarization Agent ---
 def summarization_agent(state: DocumentState) -> DocumentState:
-    llm = get_llm()
+    import time
+    start_time = time.time()
+    
+    # Get analytics trackers from state
+    token_tracker = state.get('_token_tracker')
+    agent_tracker = state.get('_agent_tracker')
+    
+    if agent_tracker:
+        agent_tracker.start_agent("summarizer", state)
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
+    
     # In a real chunk-based system, we would summarize chunks and then aggregate.
     # Here we perform a direct summarization on the potentially truncated text 
     # or the aggregated chunks if we implemented a map-reduce. 
     # We will use the raw text (truncated if massive).
     
     text_content = state["raw_text"][:15000] 
+
+    if agent_tracker:
+        agent_tracker.start_agent(
+            "summarizer", 
+            state,
+            additional_info={"input_length": len(text_content)}
+        )
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
 
     prompt = ChatPromptTemplate.from_template(
         """
@@ -135,21 +228,57 @@ def summarization_agent(state: DocumentState) -> DocumentState:
         result = chain.invoke({"text": text_content})
         summary = result.get("summary", "No summary generated.")
         log = "Summarization Agent: Generated summary."
+        success = True
     except Exception as e:
         summary = "Error generating summary."
         log = f"Summarization Agent: Failed. Error: {str(e)}"
+        success = False
 
-    return {
+    result_state = {
         "summary": summary,
         "agent_logs": state["agent_logs"] + [log]
     }
+    
+    if agent_tracker:
+        agent_tracker.end_agent(
+            result_state, 
+            success=success,
+            additional_info={"summary_length": len(summary) if summary else 0}
+        )
+    
+    return result_state
 
 # --- Agent 4: Insight Generator Agent ---
 def insight_generator_agent(state: DocumentState) -> DocumentState:
-    llm = get_llm()
+    import time
+    start_time = time.time()
+    
+    # Get analytics trackers from state
+    token_tracker = state.get('_token_tracker')
+    agent_tracker = state.get('_agent_tracker')
+    
+    if agent_tracker:
+        agent_tracker.start_agent("insight_generator", state)
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
+    
     summary = state.get("summary", "")
     sections = state.get("extracted_sections", {})
     doc_type = state.get("document_type", "Unknown") # Access from state directly
+
+    if agent_tracker:
+        agent_tracker.start_agent(
+            "insight_generator", 
+            state,
+            additional_info={
+                "has_summary": bool(summary),
+                "num_sections": len(sections)
+            }
+        )
+    
+    callbacks = [token_tracker] if token_tracker else []
+    llm = get_llm(callbacks=callbacks)
 
     prompt = ChatPromptTemplate.from_template(
         """
@@ -176,11 +305,22 @@ def insight_generator_agent(state: DocumentState) -> DocumentState:
         result = chain.invoke({"summary": summary, "sections": json.dumps(sections), "doc_type": doc_type})
         insights = result.get("insights", [])
         log = f"Insight Agent: Generated {len(insights)} insights."
+        success = True
     except Exception as e:
         insights = []
         log = f"Insight Agent: Failed. Error: {str(e)}"
+        success = False
 
-    return {
+    result_state = {
         "insights": insights,
         "agent_logs": state["agent_logs"] + [log]
     }
+    
+    if agent_tracker:
+        agent_tracker.end_agent(
+            result_state, 
+            success=success,
+            additional_info={"num_insights": len(insights)}
+        )
+    
+    return result_state
