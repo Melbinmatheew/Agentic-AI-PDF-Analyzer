@@ -218,7 +218,7 @@ def summarization_agent(state: DocumentState) -> DocumentState:
         Document Text:
         {text}
         
-        Return a JSON object with `summary` key.
+        Return a JSON object with `summary` key. The value of `summary` MUST be a single string paragraph, NOT an object or list.
         """
     )
     
@@ -226,7 +226,14 @@ def summarization_agent(state: DocumentState) -> DocumentState:
     
     try:
         result = chain.invoke({"text": text_content})
-        summary = result.get("summary", "No summary generated.")
+        summary_val = result.get("summary", "No summary generated.")
+        
+        # Ensure summary is a string
+        if isinstance(summary_val, (dict, list)):
+            summary = json.dumps(summary_val)
+        else:
+            summary = str(summary_val)
+            
         log = "Summarization Agent: Generated summary."
         success = True
     except Exception as e:
